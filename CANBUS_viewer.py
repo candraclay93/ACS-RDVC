@@ -230,12 +230,15 @@ class DashboardWindow(QMainWindow):
                 self.table_widget.setItem(row_pos, 3, QTableWidgetItem(vlat))
                 self.table_widget.setItem(row_pos, 4, QTableWidgetItem(vlong))
                 self.table_widget.setItem(row_pos, 5, QTableWidgetItem(raw))
+    
     def update_camera_frame(self, image):
         self.video_label.setPixmap(QPixmap.fromImage(image))
+    
     def closeEvent(self, event):
         if hasattr(self, 'camera_thread'):
             self.camera_thread.stop()
         event.accept()    
+
 def run_gui(data_queue):
     app = QApplication(sys.argv)
     win = DashboardWindow(data_queue)
