@@ -4,6 +4,7 @@ from CANBUS_reader import can_listener
 from CANBUS_viewer import run_gui
 from CAM_reader import CameraFeed
 
+
 if __name__ == "__main__":
     mp.set_start_method('spawn')  # safer for GUI multiprocessing on Linux
 

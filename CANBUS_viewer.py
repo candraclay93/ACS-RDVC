@@ -11,6 +11,10 @@ from PyQt6.QtCore import QTimer, Qt
 from PyQt6.QtGui import QPixmap 
 import pyqtgraph as pg
 
+from CV_CALIBRATION import CVCalibrationDialog
+from RADAR_TEST import RadarTestDialog
+from VIDEO_TEST import selectVideoDialog
+
 class CANPlotter(pg.PlotWidget):
     def __init__(self, data_queue):
         super().__init__(background='k')
@@ -148,10 +152,20 @@ class DashboardWindow(QMainWindow):
         button_layout = QVBoxLayout()
         button_layout.setSpacing(8)
         button_layout.setContentsMargins(5, 5, 5, 5)
-        for text in ["CV Calibration", "Radar Test", "Test CAN", "Network Setup", "ACS Run"]:
+        for text in ["CV CALIBRATION", "RADAR CHECK", "VIDEO CHECK", "FUSION CHECK", "ACS RUN"]:
             btn = QPushButton(text)
             btn.setFixedHeight(40)
             button_layout.addWidget(btn)
+            if text == "CV CALIBRATION":
+                btn.clicked.connect(self.cv_calibration)
+            elif text == "RADAR CHECK":
+                btn.clicked.connect(self.radar_test)
+            elif text == "VIDEO CHECK":
+                btn.clicked.connect(self.test_can)
+            elif text == "FUSION CHECK":
+                btn.clicked.connect(self.network_setup)
+            elif text == "ACS RUN":
+                btn.clicked.connect(self.acs_run)
         button_layout.addStretch()
         left_panel.addLayout(button_layout)
 
@@ -167,14 +181,6 @@ class DashboardWindow(QMainWindow):
         self.camera_thread = CameraFeed()
         self.camera_thread.frame_ready.connect(self.update_camera_frame)
         self.camera_thread.start()
-        
-        """
-        video_label = QLabel("Video stream from OpenCV")
-        video_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        video_label.setFixedHeight(400)
-        video_label.setStyleSheet("background-color: #49483e; color: #f8f8f2;")
-        left_panel.addWidget(video_label)
-        """
 
         self.table_widget = QTableWidget(0, 6)
         self.table_widget.setHorizontalHeaderLabels(["ID", "Lat dist", "Long dist", "vel Lat", "vel Long", "RCS"])
@@ -198,6 +204,26 @@ class DashboardWindow(QMainWindow):
         self.timer.start(10)
 
         right_panel.addWidget(self.plot_widget)
+
+    def cv_calibration(self):
+        dialog = CVCalibrationDialog("cv_settings.yaml")  # path to your .yaml config
+        dialog.exec()
+
+    def radar_test(self):
+        dlg = RadarTestDialog(self)
+        dlg.exec()
+
+    def test_can(self):
+        dlg = selectVideoDialog(self)
+        dlg.exec()
+
+    def network_setup(self):
+        print("Network Setup button clicked")
+        # Open a network settings window or dialog
+
+    def acs_run(self):
+        print("ACS Run button clicked")
+        # Begin the full Autonomous Control System routine    
     
     def refresh_dashboard(self):
         new_objects = self.plot_widget.update_plot()
