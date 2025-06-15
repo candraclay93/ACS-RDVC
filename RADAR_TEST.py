@@ -7,7 +7,6 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import QTimer
 
-
 class RadarTestDialog(QDialog):
     def __init__(self, data_queue, parent=None):
         super().__init__(parent)

@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem, QHeaderView, QGridLayout
 )
 from PyQt6.QtCore import QTimer, Qt
-from PyQt6.QtGui import QPixmap 
+from PyQt6.QtGui import QPixmap, QPainter, QColor, QBrush
 import pyqtgraph as pg
 
 from CV_CALIBRATION import CVCalibrationDialog
@@ -16,7 +16,7 @@ from RADAR_TEST import RadarTestDialog
 from VIDEO_TEST import selectVideoDialog
 
 class CANPlotter(pg.PlotWidget):
-    def __init__(self, data_queue):
+    def __init__(self, data_queue, fusion_enabled):
         super().__init__(background='k')
 
         self.setLabel('bottom', 'Camera Coordinate (X, meters)')
@@ -29,12 +29,14 @@ class CANPlotter(pg.PlotWidget):
         self.addItem(self.scatter)
 
         self.data_queue = data_queue
+        self.fusion_enabled = fusion_enabled
         self.objects = {}
         self.arrows = []
         self.labels = []
         
         self.timer = QTimer()
-        self.timer.timeout.connect(self.update_plot)
+        if self.fusion_enabled:
+            self.timer.timeout.connect(self.update_plot)
         self.timer.start(100)
     
     def update_plot(self):
@@ -103,9 +105,12 @@ class CANPlotter(pg.PlotWidget):
 class DashboardWindow(QMainWindow):
     def __init__(self, data_queue):
         super().__init__()
+        
         self.setWindowTitle("Radar Dashboard")
         self.setGeometry(100, 100, 1200, 700)
-
+        self.fusion_enabled = False
+        self.radar_test_enable = False
+        
         self.setStyleSheet("""
             QWidget {
                 background-color: #272822;
@@ -160,6 +165,7 @@ class DashboardWindow(QMainWindow):
                 btn.clicked.connect(self.cv_calibration)
             elif text == "RADAR CHECK":
                 btn.clicked.connect(self.radar_test)
+                self.viewPlot = 0
             elif text == "VIDEO CHECK":
                 btn.clicked.connect(self.test_can)
             elif text == "FUSION CHECK":
@@ -171,11 +177,43 @@ class DashboardWindow(QMainWindow):
 
         # Video and Table section
         from CAM_reader import CameraFeed  # Make sure camera_feed.py is in same directory
+        
+        # self.video_label = QLabel()
+        # self.video_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # self.video_label.setFixedSize(400, 300)  # Match your scaling
+        # self.video_label.setStyleSheet("background-color: #49483e; color: #f8f8f2;")
+        # left_panel.addWidget(self.video_label)
+
+        # --- Camera Feed (with overlay) ---
         self.video_label = QLabel()
         self.video_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.video_label.setFixedSize(400, 300)  # Match your scaling
+        self.video_label.setFixedSize(400, 300)
         self.video_label.setStyleSheet("background-color: #49483e; color: #f8f8f2;")
-        left_panel.addWidget(self.video_label)
+
+        # Countdown and indicator labels
+        self.countdown_label = QLabel("")
+        self.countdown_label.setStyleSheet("font-size: 20px; color: white; background-color: transparent;")
+
+        self.indicator_label = QLabel()
+        self.indicator_label.setFixedSize(20, 20)
+
+        # Initial blank indicator
+        self.indicator_color = "transparent"
+        self.update_indicator()
+
+        # Horizontal layout for indicator + countdown text
+        countdown_layout = QHBoxLayout()
+        countdown_layout.addWidget(self.indicator_label)
+        countdown_layout.addWidget(self.countdown_label)
+        countdown_layout.addStretch()
+
+        # Wrap the video + countdown overlay vertically
+        camera_wrapper = QVBoxLayout()
+        camera_wrapper.addLayout(countdown_layout)
+        camera_wrapper.addWidget(self.video_label)
+
+        left_panel.addLayout(camera_wrapper)
+
 
         # Initialize and start the camera
         self.camera_thread = CameraFeed()
@@ -198,7 +236,7 @@ class DashboardWindow(QMainWindow):
         radar_label.setFixedHeight(30)
         right_panel.addWidget(radar_label)
 
-        self.plot_widget = CANPlotter(data_queue)
+        self.plot_widget = CANPlotter(data_queue, self.fusion_enabled)
         self.timer = QTimer()
         self.timer.timeout.connect(self.refresh_dashboard)
         self.timer.start(10)
@@ -206,26 +244,99 @@ class DashboardWindow(QMainWindow):
         right_panel.addWidget(self.plot_widget)
 
     def cv_calibration(self):
-        dialog = CVCalibrationDialog("cv_settings.yaml")  # path to your .yaml config
-        dialog.exec()
+        self.calib_dialog = CVCalibrationDialog("cv_settings.yaml")
+        self.calib_dialog.start_calibration_signal.connect(self.start_camera_countdown)
+        self.calib_dialog.finished.connect(self.stop_camera_countdown)
+        self.calib_dialog.exec()
 
     def radar_test(self):
-        dlg = RadarTestDialog(self)
+        self.fusion_enabled = False
+        self.radar_test_enabled = True  # Set this flag so radar test window can stream from queue
+        dlg = RadarTestDialog(self.plot_widget.data_queue, parent=self)
         dlg.exec()
-
+        self.radar_test_enabled = False  # Reset flag when dialog is closed
+        
     def test_can(self):
         dlg = selectVideoDialog(self)
         dlg.exec()
 
     def network_setup(self):
         print("Network Setup button clicked")
-        # Open a network settings window or dialog
-
+        if self.fusion_enabled:
+            self.fusion_enabled = False
+        elif not self.fusion_enabled:
+            self.fusion_enabled = True    
+            self.radar_test_enabled = False
+        
     def acs_run(self):
         print("ACS Run button clicked")
-        # Begin the full Autonomous Control System routine    
+
+    def start_camera_countdown(self):
+        self.countdown_cycles = 2  # Run countdown 20 times
+        self.countdown = 5
+        self.indicator_color = "red"
+        self.countdown_label.setText(str(self.countdown))
+        self.update_indicator()
+        
+        self.countdown_timer = QTimer()
+        self.countdown_timer.timeout.connect(self.update_countdown)
+        self.countdown_timer.start(1000)
+
+    def update_countdown(self):
+        self.countdown -= 1
+        self.countdown_label.setText(str(self.countdown))
+
+        if self.countdown <= 0:
+            self.countdown_cycles -= 1
+            self.indicator_color = "green"
+            self.update_indicator()
+
+            if self.countdown_cycles <= 0:
+                self.countdown_timer.stop()
+            else:
+                # After 200 ms, restart countdown and turn indicator red again
+                QTimer.singleShot(200, self.start_next_cycle)
     
+    def start_next_cycle(self):
+        self.countdown = 5
+        self.indicator_color = "red"
+        self.countdown_label.setText(str(self.countdown))
+        self.update_indicator()            
+
+    def update_indicator(self):
+        pixmap = QPixmap(30, 30)
+        pixmap.fill(Qt.GlobalColor.transparent)  
+        painter = QPainter(pixmap)
+        painter.setBrush(QBrush(QColor(self.indicator_color)))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawEllipse(0, 0, 30, 30)
+        painter.end()
+        self.indicator_label.setPixmap(pixmap)
+
+    def stop_camera_countdown(self):
+        if hasattr(self, 'countdown_timer') and self.countdown_timer.isActive():
+            self.countdown_timer.stop()
+        self.countdown_cycles = 0
+        self.countdown = 0
+        self.countdown_label.setText("")
+        self.indicator_label.clear()    
+        
     def refresh_dashboard(self):
+        if not self.fusion_enabled or self.radar_test_enabled:
+            # Clear the radar scatter plot
+            self.plot_widget.scatter.setData(x=[], y=[])
+            # Remove arrows
+            for arrow in self.plot_widget.arrows:
+                self.plot_widget.removeItem(arrow)
+            self.plot_widget.arrows.clear()
+            # Remove text labels
+            for label in self.plot_widget.labels:
+                self.plot_widget.removeItem(label)
+            self.plot_widget.labels.clear()
+            # Clear the table
+            self.table_widget.setRowCount(0)
+            return
+        
         new_objects = self.plot_widget.update_plot()
 
         for parsed in new_objects:
