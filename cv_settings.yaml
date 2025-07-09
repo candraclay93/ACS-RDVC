@@ -1,0 +1,15 @@
+exposure: 14853
+person_class_path: /home/ubuntu/Desktop/Model/Person.txt
+person_model_path: /home/ubuntu/Desktop/Model/Person.pt
+sign_class_path: /home/ubuntu/Desktop/Model/Sign.txt
+sign_model_path: /home/ubuntu/Desktop/Model/Sign.pt
+size: HD
+vehicle_class_path: /home/excarobo/Desktop/OBJECT/model.txt
+vehicle_model_path: /home/excarobo/Desktop/OBJECT/model.pt
+
+
+checkerboard:
+  calibration_path: /home/sigmoid/indie_project/Patria/new/Module/data/images/checkerboard_images/lt1_pantry5
+  height: 8
+  width: 8
+  square_size: 0.4
